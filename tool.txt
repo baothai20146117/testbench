@@ -1,0 +1,589 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.IO.Ports;
+using ZedGraph;
+using System.Management;
+using System.IO;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.TaskbarClock;
+using System.Security.Cryptography;
+using System.Threading;
+namespace testUSB
+{
+    public partial class Form1 : Form
+    {
+        public Point mouseLocation;
+        public Form1()
+        {
+            InitializeComponent();
+        }
+        double front_vel, rear_vel ,frontTeethCount ,rearTeethCount ,frontCir , rearCir;
+        double[] speed_f,speed_r, time_f,time_r,paraSetupArray;
+        public PointPairList pointf = new PointPairList();
+        public PointPairList pointr = new PointPairList();
+        string dataIn;
+        private void Form1_Load(object sender, EventArgs e)
+        {
+            timerPort.Enabled = true;
+            LCSGraph_Initialize();
+    }
+
+        private void LCSGraph_Initialize()
+        {
+            GraphPane dothi1 = lcsFront.GraphPane;
+            dothi1.Title.Text = "FRONT LCS GRAPH";
+            dothi1.XAxis.Title.Text = "Time(s)";
+            dothi1.YAxis.Title.Text = "Speed(kmh)";
+            dothi1.Title.FontSpec.Size = 24;
+            dothi1.XAxis.Title.FontSpec.Size = 22;
+            dothi1.YAxis.Title.FontSpec.Size = 22;
+            dothi1.XAxis.Scale.FontSpec.Size = 22;
+            dothi1.YAxis.Scale.FontSpec.Size = 22;
+            dothi1.XAxis.MajorGrid.IsVisible = true;
+            dothi1.YAxis.MajorGrid.IsVisible = true;
+            dothi1.XAxis.Scale.Max = 20;
+            dothi1.YAxis.Scale.Max = 20;
+            dothi1.XAxis.Scale.MinorStep = 0.1;
+            dothi1.XAxis.Scale.MajorStep = 1;
+            dothi1.YAxis.Scale.MajorStep = 5;
+            dothi1.Chart.Fill = new Fill(Color.White, Color.FromArgb(54, 75, 109), 45.0f);
+            dothi1.Fill = new Fill(Color.White, Color.White, 45.0f);
+
+            RollingPointPairList list2 = new RollingPointPairList(60000);
+            LineItem curve2 = dothi1.AddCurve("Current Speed", list2, Color.Red, SymbolType.None);
+
+
+            lcsFront.IsShowPointValues = true;
+            lcsFront.AxisChange();
+
+
+
+            GraphPane dothi3 = lcsRear.GraphPane;
+            dothi3.Title.Text = "REAR LCS GRAPH";
+            dothi3.XAxis.Title.Text = "Time(s)";
+            dothi3.YAxis.Title.Text = "Speed(kmh)";
+            dothi3.Title.FontSpec.Size = 24;
+            dothi3.XAxis.Title.FontSpec.Size = 22;
+            dothi3.YAxis.Title.FontSpec.Size = 22;
+            dothi3.XAxis.Scale.FontSpec.Size = 22;
+            dothi3.YAxis.Scale.FontSpec.Size = 22;
+            dothi3.XAxis.MajorGrid.IsVisible = true;
+            dothi3.YAxis.MajorGrid.IsVisible = true;
+            dothi3.XAxis.Scale.Max = 20;
+            dothi3.YAxis.Scale.Max = 20;
+            dothi3.XAxis.Scale.MinorStep = 0.1;
+            dothi3.XAxis.Scale.MajorStep = 1;
+            dothi3.YAxis.Scale.MajorStep = 5;
+            dothi3.Chart.Fill = new Fill(Color.White, Color.FromArgb(54, 75, 109), 45.0f);
+            dothi3.Fill = new Fill(Color.White, Color.White, 0.0f);
+
+
+            RollingPointPairList list3 = new RollingPointPairList(60000);
+            LineItem curve3 = dothi3.AddCurve("Current Speed", list3, Color.Red, SymbolType.None);
+
+
+            lcsRear.IsShowPointValues = true;
+            lcsRear.AxisChange();
+
+        }
+
+    
+
+        double[] toDoubleArray(string value, char sep)
+        {
+            string[] sa = value.Split(sep);
+            double[] ia = new double[sa.Length];
+            for (int i = 0; i < ia.Length; ++i)
+            {
+                double j;
+                string s = sa[i];
+                if (double.TryParse(s, out j))
+                {
+                    ia[i] = j;
+                }
+            }
+            return ia;
+        }
+
+        private void timerGraph_Tick(object sender, EventArgs e)
+        {
+            SpeedGraph_Draw();
+        }
+
+        private void timerPort_Tick(object sender, EventArgs e)
+        {
+            string[] ports = SerialPort.GetPortNames();
+            port.Items.Clear();
+            port.Items.AddRange(ports);
+        }
+
+        
+
+
+        /* DRAW GRAPH */
+        int tickStart = 0;
+        public void SpeedGraph_Draw()
+        {
+
+
+            // FRONT WHEEL GRAPH
+            if (lcsFront.GraphPane.CurveList.Count <= 0) return;
+
+            LineItem curve2 = lcsFront.GraphPane.CurveList[0] as LineItem;
+
+            if (curve2 == null) return;
+
+            IPointListEdit list2 = curve2.Points as IPointListEdit;
+
+            if (list2 == null) return;
+
+
+            double time_front = (Environment.TickCount - tickStart) / 1000.0;
+
+            list2.Add(time_front, front_vel);
+
+
+            Scale SpeedScale_front = lcsFront.GraphPane.XAxis.Scale;
+
+            if (time_front > SpeedScale_front.Max - SpeedScale_front.MajorStep)
+            {
+                SpeedScale_front.Max = time_front + SpeedScale_front.MajorStep;
+                SpeedScale_front.Min = SpeedScale_front.Max - 30.0;
+            }
+            lcsFront.AxisChange();
+            lcsFront.Invalidate();
+            
+            
+            // REAR WHEEL GRAPH
+            if (lcsRear.GraphPane.CurveList.Count <= 0) return;
+
+            LineItem curve3 = lcsRear.GraphPane.CurveList[0] as LineItem;
+
+            if (curve3 == null) return;
+
+            IPointListEdit list3 = curve3.Points as IPointListEdit;
+
+            if (list3 == null) return;
+
+
+            double time_rear= (Environment.TickCount - tickStart) / 1000.0;
+
+            list3.Add(time_rear, rear_vel);
+
+
+            Scale SpeedScale_rear = lcsRear.GraphPane.XAxis.Scale;
+
+            if (time_rear > SpeedScale_rear.Max - SpeedScale_rear.MajorStep)
+            {
+                SpeedScale_rear.Max = time_rear + SpeedScale_rear.MajorStep;
+                SpeedScale_rear.Min = SpeedScale_rear.Max - 30.0;
+            }
+            lcsRear.AxisChange();
+            lcsRear.Invalidate();
+
+            
+        }
+
+        /* RECEIVE STM32 DATA*/
+        private void serialPort1_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+
+            dataIn = serialPort1.ReadExisting();
+            this.Invoke(new EventHandler(showdata));
+           
+        }
+      
+
+        /* PROCESS STM32 DATA*/
+        private void showdata(object sender, EventArgs e)
+        {
+            try
+            {
+                string data = dataIn.Trim();
+                string strCheck = data.Substring(0, 1);
+                string strData = data.Substring(1);
+
+                switch (strCheck)
+                {
+                    case "a":
+                        lbFrontSpeed.Text = strData;
+                        front_vel = Convert.ToDouble(strData);
+                        break;
+
+                    case "v":
+                        break;
+
+                    case "b":
+                        lbRearSpeed.Text = strData;
+                        rear_vel = Convert.ToDouble(strData);
+                        break;
+
+                    case "l":
+                        paraSetupArray = toDoubleArray(strData, ',');
+                        tbFrNo.Text = paraSetupArray[0].ToString();
+                        tbFrCir.Text = paraSetupArray[1].ToString();
+                        tbRearNo.Text = paraSetupArray[2].ToString();
+                        tbRearCir.Text = paraSetupArray[3].ToString();
+                        break; 
+
+                    case "m":
+                        timerGraph.Stop();
+                        break;
+                    
+                    case "n":
+                        timerGraph.Stop();
+                        break;
+                }
+
+            }
+            catch (Exception err)
+            {
+
+            }
+        }
+
+        /*  SET UP PARAMETER*/
+
+        private void btSetPara_Click(object sender, EventArgs e)
+        {
+            OpenFileDialog file = new OpenFileDialog();
+            if (file.ShowDialog() == DialogResult.OK)
+            {
+                var filelocation = File.ReadAllLines(file.FileName);
+                List<string> lines = new List<string>(filelocation);
+
+
+                for (int i = 0; i < lines.Count; i++)
+                {
+
+                    if ((lines[i] == "FESTWERT AnzahlZaehne_VA "))
+                    {
+                        string fCount = lines[i + 3].Substring(8);
+                        frontTeethCount = Convert.ToDouble(fCount);
+                    }
+
+                    if ((lines[i] == "FESTWERT AnzahlZaehne_HA "))
+                    {
+                        string rCount = lines[i + 3].Substring(8);
+                        rearTeethCount = Convert.ToDouble(rCount);
+                    }
+                    if ((lines[i] == "FESTWERT Abrollumfang_HA "))
+                    {
+                        string fCir = lines[i + 3].Substring(8);
+                        frontCir = Convert.ToDouble(fCir);
+                    }
+
+                    if ((lines[i] == "FESTWERT Abrollumfang_VA "))
+                    {
+                        string rCir = lines[i + 3].Substring(8);
+                        rearCir = Convert.ToDouble(rCir);
+                    }
+                }
+            }
+
+            try
+            {
+                if (serialPort1.IsOpen)
+                {
+                    serialPort1.Write("p" + ((int)frontTeethCount).ToString("000") + ","
+                                          + frontCir.ToString("0.000") + "/"
+                                          + ((int)rearTeethCount).ToString("000") + ","
+                                          + rearCir.ToString("0.000"));
+
+                }
+            }
+            catch (Exception err)
+            {
+                MessageBox.Show(err.Message, "Parameter Setup Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /*BUTTON START*/
+        private void btStart_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (serialPort1.IsOpen)
+                {
+
+                    tickStart = Environment.TickCount;
+
+                    if (rLCS.Checked)
+                    {
+                        serialPort1.Write("r");
+                        lcsFront.GraphPane.CurveList[0].Clear();
+                        timerGraph.Start();
+                    }
+
+                    if (rManual.Checked)
+                    {
+
+                        serialPort1.Write("s" + int.Parse(tbSetFrontSpeed.Text).ToString("000.000") + "/" + int.Parse(tbSetFrontTime.Text));
+                    }
+
+
+                }
+            }
+            catch (Exception err)
+            {
+                MessageBox.Show(err.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /* BUTTON STOP */
+        private void btStop_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                serialPort1.Write("e");
+                timerGraph.Stop();
+
+            }
+            catch (Exception err)
+            {
+                MessageBox.Show(err.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /*BUTTON COMPORT CONNECT*/
+        private void btconnect_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                serialPort1.PortName = port.Text;
+                serialPort1.Open();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            try
+            {
+                if (serialPort1.IsOpen)
+                {
+                    MessageBox.Show("Connected", "", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    btConnect.Text = "Connected";
+                    btConnect.ForeColor = Color.Green;
+                }
+
+            }
+            catch (Exception)
+            {
+
+                throw;
+            }
+        }
+
+        /* BUTTON LCS BROWSE */
+        private void btLCS_click(object sender, EventArgs e)
+        {
+            OpenFileDialog file = new OpenFileDialog();
+            if (file.ShowDialog() == DialogResult.OK)
+            {
+                var filelocation = File.ReadAllLines(file.FileName);
+                List<string> lines = new List<string>(filelocation);
+
+
+                for (int i = 0; i < lines.Count; i++)
+                {
+
+                    if ((lines[i] == "label = v_Wheel_LF"))
+                    {
+                        string t_str = lines[i + 3].Substring(5);
+                        string v_str = lines[i + 4].Substring(5);
+                        speed_f = toDoubleArray(v_str, ',');
+                        time_f = toDoubleArray(t_str, ',');
+                        for (int j = 0; j < speed_f.Length; j++)
+                        {
+                            pointf.Add(time_f[j], speed_f[j]);
+                        }
+                        LineItem item = lcsFront.GraphPane.AddCurve("LCS Front", pointf, Color.Blue, SymbolType.None);
+                        lcsFront.GraphPane.Chart.Fill = new Fill(Color.White, Color.FromArgb(54, 75, 109), 45.0f);
+                        lcsFront.GraphPane.Fill = new Fill(Color.White, Color.White, 45.0f);
+                        lcsFront.AxisChange();
+                        lcsFront.Invalidate();
+                    }
+
+                    if ((lines[i] == "label = v_Wheel_LR"))
+                    {
+                        string t_str = lines[i + 3].Substring(5);
+                        string v_str = lines[i + 4].Substring(5);
+                        speed_r = toDoubleArray(v_str, ',');
+                        time_r = toDoubleArray(t_str, ',');
+                        for (int j = 0; j < speed_r.Length; j++)
+                        {
+                            pointr.Add(time_r[j], speed_r[j]);
+                        }
+                        LineItem item = lcsRear.GraphPane.AddCurve("LCS Rear", pointr, Color.Blue, SymbolType.None);
+                        lcsRear.GraphPane.Chart.Fill = new Fill(Color.White, Color.FromArgb(54, 75, 109), 45.0f);
+                        lcsRear.GraphPane.Fill = new Fill(Color.White, Color.White, 45.0f);
+                        lcsRear.AxisChange();
+                        lcsRear.Invalidate();
+                    }
+                }
+            }
+
+            try
+            { tbLcsLink.Text = file.FileName; }
+            catch { }
+
+            try
+            {
+                if (serialPort1.IsOpen)
+                {
+                    for (int i = 0; i < speed_f.Length; i++)
+                    {
+                        serialPort1.Write("lf" + speed_f[i].ToString("000.000") + ',' + time_f[i].ToString("000.000"));
+
+                    }
+                    for (int i = 0; i < speed_r.Length; i++)
+                    {
+                        serialPort1.Write("lr" + speed_r[i].ToString("000.000") + ',' + time_r[i].ToString("000.000"));
+
+                    }
+
+                }
+            }
+
+            catch { }
+
+        }
+
+        private void btClose_Click(object sender, EventArgs e)
+        {
+            serialPort1.Close();
+            Application.Exit();
+        }
+
+        private void textBox1_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+        private void label1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void groupBox4_Enter(object sender, EventArgs e)
+        {
+
+        }
+
+        
+
+
+        /*  SET MANUAL SPEED */
+        private void btSetSpeed_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (serialPort1.IsOpen)
+                {
+
+                    serialPort1.Write("s" + double.Parse(tbSetFrontSpeed.Text).ToString("000.000")+ "/" 
+                                          + double.Parse(tbSetFrontTime.Text).ToString("000.000") + "/"
+                                          + double.Parse(tbSetRearSpeed.Text).ToString("000.000") + "/" 
+                                          + double.Parse(tbSetRearTime.Text).ToString("000.000") );
+
+
+                }
+            }
+            catch (Exception err)
+            {
+                MessageBox.Show(err.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+
+
+        /*  MODE SELECTION */
+        private void rLCS_CheckedChanged(object sender, EventArgs e)
+        {
+            boxLCS.Visible = true;
+            boxManual.Visible = false;
+            lcsFront.Visible = true ;
+            lcsRear.Visible = true ;
+        }
+
+        private void rManual_CheckedChanged(object sender, EventArgs e)
+        {
+            boxLCS.Visible = false;
+            boxManual.Visible = true;
+            lcsFront.Visible = false; 
+            lcsRear.Visible = false;
+        }
+
+        /* EXIT AND MINIMIZE BUTTON */
+        private void mouseDown(object sender, MouseEventArgs e)
+        {
+            mouseLocation = new Point(-e.X, -e.Y);
+        }
+
+        private void mouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                Point mousePose = Control.MousePosition;
+                mousePose.Offset(mouseLocation.X, mouseLocation.Y);
+                Location = mousePose;
+            }
+        }
+
+        private void panel1_Paint(object sender, PaintEventArgs e)
+        {
+
+        }
+
+
+        private void buttonMinimize_Click(object sender, EventArgs e)
+        {
+            WindowState = FormWindowState.Minimized;
+        }
+
+        private void buttonExit_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+            Close();
+        }
+
+        private void port_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            port.Text = serialPort1.PortName.ToString();
+        }
+        private void lbRearSpeed_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+
+        }
+        private void btStop_click(object sender, EventArgs e)
+        {
+
+        }
+
+        
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button1_Click_1(object sender, EventArgs e)
+        {
+
+        }
+    }
+
+}
